@@ -52,6 +52,55 @@ impl Dpll {
     }
 }
 
+pub struct Tracker {
+    last_phase: i64,
+    current_position: i64
+}
+
+impl Tracker {
+    pub fn new() -> Tracker {
+        Tracker {
+            last_phase: 0,
+            current_position: 0
+        }
+    }
+
+    pub fn edge(&mut self, phase: i64) -> i64 {
+        let phase_diff = phase.wrapping_sub(self.last_phase);
+        self.last_phase = phase;
+        self.current_position += 0x100000000 - phase_diff;
+        self.current_position
+    }
+}
+
+pub struct Decimator {
+    accumulator: i64,
+    current_count: u32,
+    max_count: u32
+}
+
+impl Decimator {
+    pub fn new(max_count: u32) -> Decimator {
+        Decimator {
+            accumulator: 0,
+            current_count: 0,
+            max_count: max_count
+        }
+    }
+
+    pub fn input(&mut self, data: i64) -> Option<i64> {
+        self.accumulator += data;
+        self.current_count += 1;
+        if self.current_count == self.max_count {
+            let average = self.accumulator/(self.current_count as i64);
+            self.accumulator = 0;
+            self.current_count = 0;
+            Some(average)
+        } else {
+            None
+        }
+    }
+}
 
 pub fn sample(command: &str, mut callback: impl FnMut(u8, u8)) {
     let child = std::process::Command::new("sh")

@@ -18,6 +18,7 @@ struct Config {
     freq_min: f64,
     freq_max: f64,
     bit_ref: u8,
+    bit_meas: u8,
     refpll_ki: i64,
     refpll_kl: i64
 }
@@ -36,8 +37,15 @@ fn main() {
         noptica::Dpll::frequency_to_ftw(config.freq_max, config.sample_rate),
         config.refpll_ki,
         config.refpll_kl);
+    let mut tracker = noptica::Tracker::new();
+    let mut decimator = noptica::Decimator::new(200000);
     noptica::sample(&config.sample_command, |rising, _falling| {
         refpll.tick(rising & (1 << config.bit_ref) != 0);
-//        println!("{}", refpll.get_phase_unwrapped());
+        if rising & (1 << config.bit_meas) != 0 {
+            let position = tracker.edge(refpll.get_phase_unwrapped());
+            if let Some(position_avg) = decimator.input(position) {
+                println!("{}", position_avg);
+            }
+        }
     })
 }
