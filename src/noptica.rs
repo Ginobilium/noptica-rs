@@ -110,14 +110,16 @@ pub fn sample(command: &str, mut callback: impl FnMut(u8, u8)) {
         .spawn()
         .unwrap();  
     let mut reader = BufReader::new(child.stdout.unwrap());
-    let mut br_sample = [0; 1];
+    let mut buffer = [0; 1];
     let mut last_sample = 0;
     loop {
-        reader.read_exact(&mut br_sample).unwrap();
-        let sample = br_sample[0];
-        let rising = sample & !last_sample;
-        let falling = !sample & last_sample;
-        callback(rising, falling);
-        last_sample = sample;
+        reader.read_exact(&mut buffer).unwrap();
+        for shift in [4u8, 0u8].iter() {
+            let sample = (buffer[0] >> shift) & 0x0f;
+            let rising = sample & !last_sample;
+            let falling = !sample & last_sample;
+            callback(rising, falling);
+            last_sample = sample;
+        }
     }
 }

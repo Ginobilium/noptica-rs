@@ -1,6 +1,6 @@
 {
-    "sample_command": "sudo sigrok-cli -O binary -d fx2lafw --config samplerate=6000000 --continuous",
-    "sample_rate": 6e6,
+    "sample_command": "glasgow run logic -V 3.3 --pins-d 0,1",
+    "sample_rate": 48e6,
     "freq_min": 1.9e6,
     "freq_max": 2.1e6,
     "bit_ref": 0,

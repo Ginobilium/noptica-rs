@@ -1,0 +1,82 @@
+diff --git a/software/glasgow/applet/all.py b/software/glasgow/applet/all.py
+index 5aa86ea..715e5ec 100644
+--- a/software/glasgow/applet/all.py
++++ b/software/glasgow/applet/all.py
+@@ -43,3 +43,5 @@ from .video.rgb_input import VideoRGBInputApplet
+ from .video.vga_output import VGAOutputApplet
+ from .video.vga_terminal import VGATerminalApplet
+ from .video.ws2812_output import VideoWS2812OutputApplet
++
++from .logic import LogicApplet
+diff --git a/software/glasgow/applet/logic.py b/software/glasgow/applet/logic.py
+new file mode 100644
+index 0000000..eabca52
+--- /dev/null
++++ b/software/glasgow/applet/logic.py
+@@ -0,0 +1,66 @@
++import sys
++import logging
++import asyncio
++from nmigen.compat import *
++
++from . import *
++
++
++class LogicSubtarget(Module):
++    def __init__(self, pads, in_fifo):
++        latch = Signal(4)
++
++        self.comb += [
++            in_fifo.din.eq(Cat(pads.d_t.i[:4], latch)),
++        ]
++
++        self.submodules.fsm = FSM()
++        self.fsm.act("CAPTURE-1",
++            NextValue(latch, pads.d_t.i),
++            NextState("CAPTURE-2")
++        )
++        self.fsm.act("CAPTURE-2",
++            in_fifo.we.eq(1),
++            NextState("CAPTURE-1")
++        )
++
++
++class LogicApplet(GlasgowApplet, name="logic"):
++    logger = logging.getLogger(__name__)
++    preview = True
++
++    @classmethod
++    def add_build_arguments(cls, parser, access):
++        super().add_build_arguments(parser, access)
++
++        access.add_pin_set_argument(parser, "d", required=True, width=range(5))
++
++    def build(self, target, args):
++        self.mux_interface = iface = target.multiplexer.claim_interface(self, args)
++        iface.add_subtarget(LogicSubtarget(
++            pads=iface.get_pads(args, pin_sets=("d",)),
++            in_fifo=iface.get_in_fifo(auto_flush=False),
++        ))
++
++    @classmethod
++    def add_run_arguments(cls, parser, access):
++        super().add_run_arguments(parser, access)
++
++    async def run(self, device, args):
++        return await device.demultiplexer.claim_interface(self, self.mux_interface, args)
++
++    @classmethod
++    def add_interact_arguments(cls, parser):
++        pass
++
++    async def interact(self, device, args, iface):
++        while True:
++            data = await iface.read(65536)
++            sys.stdout.buffer.write(data)
++
++# -------------------------------------------------------------------------------------------------
++
++class LogicAppletTestCase(GlasgowAppletTestCase, applet=LogicApplet):
++    @synthesis_test
++    def test_build(self):
++        self.assertBuilds()
