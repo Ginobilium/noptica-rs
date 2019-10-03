@@ -6,6 +6,6 @@
     "bit_ref": 0,
     "bit_meas": 1,
 
-    "refpll_ki": 429496,
-    "refpll_kp": 4294967
+    "refpll_ki": 4294967,
+    "refpll_kp": 85899345
 }
