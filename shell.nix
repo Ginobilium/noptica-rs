@@ -51,7 +51,7 @@ let
       owner = "m-labs";
       repo = "nmigen";
       rev = "2168ff512bfe04806b35c09d3b1d265a16c4ddbc";
-      sha256 = "1zs2xkihdkvzy5lw5kr08aw9irjn4d1imalv49zxvf6zqanghx6z";
+      sha256 = "0ij9idvlqsjzzr50vyg2ziabj7lv7yi8s0826g3acrn45hfv4535";
     };
     checkPhase = "PATH=${pkgs.yosys}/bin:${pkgs.symbiyosys}/bin:${pkgs.yices}/bin:$PATH python -m unittest discover nmigen.test -v";
     propagatedBuildInputs = with pkgs.python3Packages; [ bitarray pyvcd jinja2 ];
