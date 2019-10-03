@@ -69,9 +69,9 @@ let
     patches = [ ./glasgow-applet.diff ];
     nativeBuildInputs = with pkgs; [ gnumake sdcc ];
     propagatedBuildInputs = (
-    	[ fx2 nmigen ] ++
-    	(with pkgs.python3Packages; [ libusb1 aiohttp pyvcd bitarray crcmod ]) ++
-    	(with pkgs; [ yosys nextpnr icestorm ]));
+      [ fx2 nmigen ] ++
+      (with pkgs.python3Packages; [ libusb1 aiohttp pyvcd bitarray crcmod ]) ++
+      (with pkgs; [ yosys nextpnr icestorm ]));
     preBuild = ''
       cd software
       python setup.py build_ext

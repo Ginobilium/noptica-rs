@@ -20,7 +20,7 @@ struct Config {
     bit_ref: u8,
     bit_meas: u8,
     refpll_ki: i64,
-    refpll_kl: i64
+    refpll_kp: i64
 }
 
 fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<Error>> {
@@ -36,7 +36,7 @@ fn main() {
         noptica::Dpll::frequency_to_ftw(config.freq_min, config.sample_rate),
         noptica::Dpll::frequency_to_ftw(config.freq_max, config.sample_rate),
         config.refpll_ki,
-        config.refpll_kl);
+        config.refpll_kp);
     let mut tracker = noptica::Tracker::new();
     let mut decimator = noptica::Decimator::new(200000);
     noptica::sample(&config.sample_command, |rising, _falling| {
