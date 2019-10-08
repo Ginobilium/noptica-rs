@@ -79,7 +79,23 @@ let
     # tests are currently broken since nMigen migration
     doCheck = false;
   };
+  pyqtgraph-qt5 = pkgs.python3Packages.buildPythonPackage rec {
+    name = "pyqtgraph_qt5-${version}";
+    version = "0.10.0";
+    doCheck = false;
+    src = pkgs.fetchFromGitHub {
+      owner = "pyqtgraph";
+      repo = "pyqtgraph";
+      rev = "1426e334e1d20542400d77c72c132b04c6d17ddb";
+      sha256 = "1079haxyr316jf0wpirxdj0ry6j8mr16cqr0dyyrd5cnxwl7zssh";
+    };
+    propagatedBuildInputs = with pkgs.python3Packages; [ scipy numpy pyqt5 pyopengl ];
+  };
 in
  pkgs.mkShell {
-    buildInputs = [ glasgow pkgs.rustc pkgs.cargo ];
+    buildInputs = [
+      glasgow
+      (pkgs.python3.withPackages(ps: [ps.quamash ps.pyqt5 pyqtgraph-qt5]))
+      pkgs.rustc pkgs.cargo
+    ];
   }
