@@ -1,8 +1,8 @@
 diff --git a/software/glasgow/applet/all.py b/software/glasgow/applet/all.py
-index 5aa86ea..715e5ec 100644
+index 35b8960..3f37b9f 100644
 --- a/software/glasgow/applet/all.py
 +++ b/software/glasgow/applet/all.py
-@@ -43,3 +43,5 @@ from .video.rgb_input import VideoRGBInputApplet
+@@ -44,3 +44,5 @@ from .video.rgb_input import VideoRGBInputApplet
  from .video.vga_output import VGAOutputApplet
  from .video.vga_terminal import VGATerminalApplet
  from .video.ws2812_output import VideoWS2812OutputApplet
@@ -10,34 +10,45 @@ index 5aa86ea..715e5ec 100644
 +from .logic import LogicApplet
 diff --git a/software/glasgow/applet/logic.py b/software/glasgow/applet/logic.py
 new file mode 100644
-index 0000000..eabca52
+index 0000000..529d4e1
 --- /dev/null
 +++ b/software/glasgow/applet/logic.py
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,77 @@
 +import sys
 +import logging
 +import asyncio
 +from nmigen.compat import *
++from nmigen.compat.genlib.cdc import MultiReg
 +
 +from . import *
 +
 +
 +class LogicSubtarget(Module):
 +    def __init__(self, pads, in_fifo):
-+        latch = Signal(4)
++        input = Signal.like(pads.d_t.i)
++        latch = Signal.like(pads.d_t.i)
++        self.submodules += MultiReg(pads.d_t.i, input)
 +
 +        self.comb += [
-+            in_fifo.din.eq(Cat(pads.d_t.i[:4], latch)),
++            in_fifo.din[0:4].eq(input[0:4]),
++            in_fifo.din[4:8].eq(latch[0:4]),
 +        ]
 +
 +        self.submodules.fsm = FSM()
 +        self.fsm.act("CAPTURE-1",
-+            NextValue(latch, pads.d_t.i),
++            NextValue(latch, input),
 +            NextState("CAPTURE-2")
 +        )
 +        self.fsm.act("CAPTURE-2",
 +            in_fifo.we.eq(1),
-+            NextState("CAPTURE-1")
++            If(in_fifo.writable,
++                NextState("CAPTURE-1")
++            ).Else(
++                NextState("OVERFLOW")
++            )
++        )
++        self.fsm.act("OVERFLOW",
++            NextState("OVERFLOW")
 +        )
 +
 +
@@ -55,7 +66,7 @@ index 0000000..eabca52
 +        self.mux_interface = iface = target.multiplexer.claim_interface(self, args)
 +        iface.add_subtarget(LogicSubtarget(
 +            pads=iface.get_pads(args, pin_sets=("d",)),
-+            in_fifo=iface.get_in_fifo(auto_flush=False),
++            in_fifo=iface.get_in_fifo(auto_flush=False, depth=8192),
 +        ))
 +
 +    @classmethod
@@ -74,7 +85,7 @@ index 0000000..eabca52
 +            data = await iface.read(65536)
 +            sys.stdout.buffer.write(data)
 +
-+# -------------------------------------------------------------------------------------------------
++# ------------------------------------------------------------------------------------------------
 +
 +class LogicAppletTestCase(GlasgowAppletTestCase, applet=LogicApplet):
 +    @synthesis_test
