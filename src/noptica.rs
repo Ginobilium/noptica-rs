@@ -114,8 +114,8 @@ pub fn sample(command: &str, mut callback: impl FnMut(u8, u8)) {
     let mut last_sample = 0;
     loop {
         reader.read_exact(&mut buffer).unwrap();
-        for shift in [4u8, 0u8].iter() {
-            let sample = (buffer[0] >> shift) & 0x0f;
+        for shift in [2u8, 0u8].iter() {
+            let sample = (buffer[0] >> shift) & 0x03;
             let rising = sample & !last_sample;
             let falling = !sample & last_sample;
             callback(rising, falling);
