@@ -11,7 +11,7 @@ fp = os.fdopen(sys.stdout.fileno(), "wb")
 while True:
     sample = 0
     for _ in range(2):
-        sample <<= 4
+        sample <<= 2
 
         ref_phase = (ref_phase + ref_ftw) & 0xffffffff
         delta = 0
