@@ -23,7 +23,7 @@ struct Config {
     refpll_kp: i64
 }
 
-fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<Error>> {
+fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Error>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let u = serde_json::from_reader(reader)?;
