@@ -1,3 +1,16 @@
+diff --git a/software/glasgow/access/direct/demultiplexer.py b/software/glasgow/access/direct/demultiplexer.py
+index 3df8c2e..c1b0591 100644
+--- a/software/glasgow/access/direct/demultiplexer.py
++++ b/software/glasgow/access/direct/demultiplexer.py
+@@ -52,7 +52,7 @@ _max_packets_per_ep = 1024
+ # To try and balance these effects, we choose a medium buffer size that should work well with most
+ # applications. It's possible that this will need to become customizable later, but for now
+ # a single fixed value works.
+-_packets_per_xfer = 32
++_packets_per_xfer = 256
+ 
+ # Queue as many transfers as we can, but no more than 10, as the returns beyond that point
+ # are diminishing.
 diff --git a/software/glasgow/applet/all.py b/software/glasgow/applet/all.py
 index 35b8960..3f37b9f 100644
 --- a/software/glasgow/applet/all.py
