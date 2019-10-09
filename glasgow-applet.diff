@@ -1,13 +1,22 @@
 diff --git a/software/glasgow/access/direct/demultiplexer.py b/software/glasgow/access/direct/demultiplexer.py
-index 3df8c2e..c1b0591 100644
+index 3df8c2e..068b40e 100644
 --- a/software/glasgow/access/direct/demultiplexer.py
 +++ b/software/glasgow/access/direct/demultiplexer.py
+@@ -30,7 +30,7 @@ from .. import AccessDemultiplexer, AccessDemultiplexerInterface
+ #
+ # To deal with this, use requests of at most 1024 EP buffer sizes (512 KiB with the FX2) as
+ # an arbitrary cutoff, and hope for the best.
+-_max_packets_per_ep = 1024
++_max_packets_per_ep = 2048
+ 
+ # USB has the limitation that all transactions are host-initiated. Therefore, if we do not queue
+ # reads for the IN endpoints quickly enough, the HC will not even poll the device, and the buffer
 @@ -52,7 +52,7 @@ _max_packets_per_ep = 1024
  # To try and balance these effects, we choose a medium buffer size that should work well with most
  # applications. It's possible that this will need to become customizable later, but for now
  # a single fixed value works.
 -_packets_per_xfer = 32
-+_packets_per_xfer = 256
++_packets_per_xfer = 512
  
  # Queue as many transfers as we can, but no more than 10, as the returns beyond that point
  # are diminishing.
@@ -23,7 +32,7 @@ index 35b8960..3f37b9f 100644
 +from .logic import LogicApplet
 diff --git a/software/glasgow/applet/logic.py b/software/glasgow/applet/logic.py
 new file mode 100644
-index 0000000..c721acd
+index 0000000..c58de0b
 --- /dev/null
 +++ b/software/glasgow/applet/logic.py
 @@ -0,0 +1,92 @@
@@ -93,7 +102,7 @@ index 0000000..c721acd
 +        self.mux_interface = iface = target.multiplexer.claim_interface(self, args)
 +        iface.add_subtarget(LogicSubtarget(
 +            pads=iface.get_pads(args, pin_sets=("d",)),
-+            in_fifo=iface.get_in_fifo(auto_flush=False, depth=8192),
++            in_fifo=iface.get_in_fifo(auto_flush=False, depth=16384),
 +        ))
 +
 +    @classmethod
