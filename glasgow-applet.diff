@@ -10,12 +10,13 @@ index 35b8960..3f37b9f 100644
 +from .logic import LogicApplet
 diff --git a/software/glasgow/applet/logic.py b/software/glasgow/applet/logic.py
 new file mode 100644
-index 0000000..529d4e1
+index 0000000..c721acd
 --- /dev/null
 +++ b/software/glasgow/applet/logic.py
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,92 @@
 +import sys
 +import logging
++import os
 +import asyncio
 +from nmigen.compat import *
 +from nmigen.compat.genlib.cdc import MultiReg
@@ -52,6 +53,19 @@ index 0000000..529d4e1
 +        )
 +
 +
++async def async_stdout(limit=asyncio.streams._DEFAULT_LIMIT, loop=None):
++    if loop is None:
++        loop = asyncio.get_event_loop()
++
++    writer_transport, writer_protocol = await loop.connect_write_pipe(
++        lambda: asyncio.streams.FlowControlMixin(loop=loop),
++        os.fdopen(sys.stdout.fileno(), "wb"))
++    writer = asyncio.streams.StreamWriter(
++        writer_transport, writer_protocol, None, loop)
++
++    return writer
++
++
 +class LogicApplet(GlasgowApplet, name="logic"):
 +    logger = logging.getLogger(__name__)
 +    preview = True
@@ -81,9 +95,10 @@ index 0000000..529d4e1
 +        pass
 +
 +    async def interact(self, device, args, iface):
++        output_stream = await async_stdout()
 +        while True:
 +            data = await iface.read(65536)
-+            sys.stdout.buffer.write(data)
++            output_stream.write(data)
 +
 +# ------------------------------------------------------------------------------------------------
 +
