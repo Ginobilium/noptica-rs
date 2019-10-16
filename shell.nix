@@ -17,17 +17,17 @@ let
       python setup.py build_ext
     '';
   };
-  nmigen = pkgs.python3Packages.buildPythonPackage {
+  nmigen = pkgs.python3Packages.buildPythonPackage rec {
     name = "nmigen";
-    version = "2019-10-06";
+    version = "0.1rc1";
     src = pkgs.fetchgit {
       url = "https://github.com/m-labs/nmigen";
-      rev = "2512a9a12d2c062b8f34330c379ec523b125f38d";
-      sha256 = "0mi2snd8daabdmcbmc10hxzjmnmx85rnx1njqmrj1ll2jin3ncq7";
+      rev = "v${version}";
+      sha256 = "002kyxazpc2azarfzahr17imizs0m9m5silggzx8yyy1kljxl796";
       leaveDotGit = true;
     };
     checkPhase = "PATH=${pkgs.yosys}/bin:${pkgs.symbiyosys}/bin:${pkgs.yices}/bin:$PATH python -m unittest discover nmigen.test -v";
-    nativeBuildInputs = with pkgs; [ pkgs.python3Packages.setuptools_scm git ];
+    nativeBuildInputs = with pkgs; [ python3Packages.setuptools_scm git ];
     propagatedBuildInputs = with pkgs.python3Packages; [ bitarray pyvcd jinja2 ];
   };
   glasgow = pkgs.python3Packages.buildPythonApplication rec {
@@ -36,12 +36,12 @@ let
     src = pkgs.fetchgit {
       url = "https://github.com/GlasgowEmbedded/Glasgow";
       rev = "bfe49bebc4483b32eed8ec127a98a9fa2e77e7d4";
-      sha256 = "0wvn7ysixgxm35ghdp0cdqfp5pxpbxvr1r9d5amcz3ss6bd2844c";
+      sha256 = "0sh7l57pr49mmiqxq6g12pcln9h474gvlkfh3c439aqiv3p3jvyl";
       fetchSubmodules = true;
       leaveDotGit = true;
     };
     patches = [ ./glasgow-applet.diff ];
-    nativeBuildInputs = with pkgs; [ pkgs.python3Packages.setuptools_scm git gnumake sdcc ];
+    nativeBuildInputs = with pkgs; [ python3Packages.setuptools_scm git gnumake sdcc ];
     propagatedBuildInputs = (
       [ fx2 nmigen ] ++
       (with pkgs.python3Packages; [ setuptools libusb1 aiohttp pyvcd bitarray crcmod ]) ++
