@@ -31,7 +31,7 @@ fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Erro
 }
 
 fn main() {
-    let config = read_config_from_file("config.json").unwrap();
+    let config = read_config_from_file("simple-dmi.json").unwrap();
     let mut refpll = noptica::Dpll::new(
         noptica::Dpll::frequency_to_ftw(config.freq_min, config.sample_rate),
         noptica::Dpll::frequency_to_ftw(config.freq_max, config.sample_rate),

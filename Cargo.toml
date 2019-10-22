@@ -4,6 +4,14 @@ version = "0.1.0"
 authors = ["Sebastien Bourdeauducq <sb@m-labs.hk>"]
 edition = "2018"
 
+[[bin]]
+name = "simple-dmi"
+path = "src/simple-dmi.rs"
+
+[[bin]]
+name = "wavemeter"
+path = "src/wavemeter.rs"
+
 [dependencies]
 num-traits = "0.2"
 serde = "1.0"

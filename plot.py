@@ -9,7 +9,7 @@ async def task(mw):
     mw.setCentralWidget(widget)
     mw.show()
 
-    process = await asyncio.create_subprocess_shell("cargo run --release",
+    process = await asyncio.create_subprocess_shell("cargo run --release --bin simple-dmi",
         stdout=asyncio.subprocess.PIPE)
     data = []
     while True:
