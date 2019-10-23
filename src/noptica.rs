@@ -32,7 +32,7 @@ impl Dpll {
     }
 
     pub fn frequency_to_ftw(frequency: f64, sample_rate: f64) -> i64 {
-        (frequency*(u32::max_value() as f64)/sample_rate) as i64
+        (frequency*(0x100000000i64 as f64)/sample_rate) as i64
     }
 
     pub fn tick(&mut self, edge: bool) {
