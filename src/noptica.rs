@@ -15,9 +15,12 @@ pub struct Dpll {
 }
 
 impl Dpll {
+    pub const TURN: i64 = 0x100000000;  // One turn in DPLL phase units.
+
     pub fn new(ftw_min: i64, ftw_max: i64, ki: i64, kp: i64) -> Dpll {
-        assert!(ftw_min < 0x80000000);
-        assert!(ftw_max < 0x80000000);
+        assert!(ftw_min < Dpll::TURN/2);
+        assert!(ftw_max < Dpll::TURN/2);
+        assert!(Dpll::TURN & (Dpll::TURN - 1) == 0);  // must be a power of 2
         let init_ftw = (ftw_min + ftw_max)/2;
         Dpll {
             ftw_min: ftw_min,
@@ -32,14 +35,14 @@ impl Dpll {
     }
 
     pub fn frequency_to_ftw(frequency: f64, sample_rate: f64) -> i64 {
-        (frequency*(0x100000000i64 as f64)/sample_rate) as i64
+        (frequency*(Dpll::TURN as f64)/sample_rate) as i64
     }
 
     pub fn tick(&mut self, edge: bool) {
-        self.phase = (self.phase + self.ftw) & 0xffffffff;
+        self.phase = (self.phase + self.ftw) & (Dpll::TURN - 1);
         self.phase_unwrapped = self.phase_unwrapped.wrapping_add(self.ftw);
         if edge {
-            let pe = 0x80000000 - self.phase;
+            let pe = Dpll::TURN/2 - self.phase;
             self.integrator = clamp(self.integrator + (pe*self.ki >> 32),
                 self.ftw_min, self.ftw_max);
             self.ftw = clamp(self.integrator + (pe*self.kp >> 32),
@@ -68,7 +71,7 @@ impl PositionTracker {
     pub fn edge(&mut self, phase: i64) -> i64 {
         let phase_diff = phase.wrapping_sub(self.last_phase);
         self.last_phase = phase;
-        self.current_position += 0x100000000 - phase_diff;
+        self.current_position += Dpll::TURN - phase_diff;
         self.current_position
     }
 }
