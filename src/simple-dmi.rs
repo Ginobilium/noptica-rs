@@ -20,7 +20,8 @@ struct Config {
     bit_ref: u8,
     bit_meas: u8,
     refpll_ki: i64,
-    refpll_kp: i64
+    refpll_kp: i64,
+    decimation: u32
 }
 
 fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Error>> {
@@ -38,7 +39,7 @@ fn main() {
         config.refpll_ki,
         config.refpll_kp);
     let mut tracker = noptica::Tracker::new();
-    let mut decimator = noptica::Decimator::new(200000);
+    let mut decimator = noptica::Decimator::new(config.decimation);
     noptica::sample(&config.sample_command, |rising, _falling| {
         refpll.tick(rising & (1 << config.bit_ref) != 0);
         if rising & (1 << config.bit_meas) != 0 {

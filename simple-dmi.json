@@ -7,5 +7,7 @@
     "bit_meas": 1,
 
     "refpll_ki": 4294967,
-    "refpll_kp": 85899345
+    "refpll_kp": 85899345,
+
+    "decimation": 200000
 }
