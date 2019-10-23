@@ -1,0 +1,17 @@
+{
+    "sample_command": "glasgow run logic -V 3.3 --pins-d 0,1,2",
+    "sample_rate": 48e6,
+    "bit_ref": 0,
+    "bit_meas": 1,
+    "bit_input": 2,
+
+    "ref_min": 1.9e6,
+    "ref_max": 2.1e6,
+    "refpll_ki": 4294967,
+    "refpll_kp": 85899345,
+
+    "ref_wavelength": 632.991372e-9,
+    "scan_displacement": 40e-6,
+    "scan_frequency": 50.0,
+    "scan_blanking": 0.05
+}
