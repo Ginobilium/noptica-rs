@@ -52,14 +52,14 @@ impl Dpll {
     }
 }
 
-pub struct Tracker {
+pub struct PositionTracker {
     last_phase: i64,
     current_position: i64
 }
 
-impl Tracker {
-    pub fn new() -> Tracker {
-        Tracker {
+impl PositionTracker {
+    pub fn new() -> PositionTracker {
+        PositionTracker {
             last_phase: 0,
             current_position: 0
         }
