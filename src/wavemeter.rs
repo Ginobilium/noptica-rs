@@ -36,7 +36,10 @@ struct Config {
 
     ref_wavelength: f64,    // Wavelength of the reference laser in m.
     scan_displacement: f64, // Optical path difference across one scan cycle in m (use -c).
+    scan_decimation: u32,   // Decimation factor for the scan positions.
     scan_frequency: f64,    // Frequency of the scan in Hz.
+    scan_speed_tol: f64,    // Fraction of the nominal scan speed that is accepted as deviation
+                            // from "smooth" motion.
     scan_blanking: f64,     // Fraction of the scan period that is blanked at the beginning
                             // and end of each slope (4 times per scan period).
 }
@@ -84,8 +87,143 @@ fn do_calibrate(config: &Config) {
     })
 }
 
+enum MotionTrackerState {
+    BlankingIn(u32),
+    Smooth(u32),
+    BlankingOut
+}
+
+pub struct MotionTracker {
+    abs_speed_min: i64,
+    abs_speed_max: i64,
+    len_blanking_in: u32,
+    len_smooth: u32,
+
+    state: MotionTrackerState,
+    last_position: i64,
+    last_position_ago: u32,
+    speed: i64
+}
+
+impl MotionTracker {
+    pub fn new(abs_speed_min: i64, abs_speed_max: i64, len_blanking_in: u32, len_smooth: u32) -> MotionTracker {
+        MotionTracker {
+            abs_speed_min: abs_speed_min,
+            abs_speed_max: abs_speed_max,
+            len_blanking_in: len_blanking_in,
+            len_smooth: len_smooth,
+            state: MotionTrackerState::BlankingIn(0),
+            last_position: 0,
+            last_position_ago: 0,
+            speed: 0
+        }
+    }
+
+    fn speed_ok(&self) -> bool {
+        let abs_speed = self.speed.abs();
+        (self.abs_speed_min < abs_speed) && (abs_speed < self.abs_speed_max)
+    }
+
+    pub fn extrapolated_position(&self) -> i64 {
+        self.last_position + self.speed*(self.last_position_ago as i64)
+    }
+
+    pub fn tick(&mut self, position: Option<i64>, mut callback: impl FnMut(bool)) {
+        self.last_position_ago += 1;
+        if let Some(position) = position {
+            self.speed = (position - self.last_position)/(self.last_position_ago as i64);
+            self.last_position = position;
+            self.last_position_ago = 0;
+        }
+
+        match self.state {
+            MotionTrackerState::BlankingIn(count) => {
+                let count = if self.speed_ok() { count + 1 } else { 0 };
+                if count == self.len_blanking_in {
+                    self.state = MotionTrackerState::Smooth(0);
+                    callback(true);
+                }  else {
+                    self.state = MotionTrackerState::BlankingIn(count);
+                }
+            },
+            MotionTrackerState::Smooth(count) => {
+                if self.speed_ok() {
+                    let count = count + 1;
+                    if count == self.len_smooth {
+                        self.state = MotionTrackerState::BlankingOut;
+                        callback(false);
+                    } else {
+                        self.state = MotionTrackerState::Smooth(count);
+                    }
+                } else {
+                    // abort
+                    self.state = MotionTrackerState::BlankingIn(0);
+                }
+            },
+            MotionTrackerState::BlankingOut => {
+                if !self.speed_ok() {
+                    self.state = MotionTrackerState::BlankingIn(0);
+                }
+            }
+        }
+    }
+}
+
 fn do_wavemeter(config: &Config) {
-    println!("TODO {}", config.sample_command);
+    let mut first_fringe_position: i64 = 0;
+    let mut last_fringe_position: i64 = 0;
+    let mut fringe_count = 0;
+    let mut counting_fringes = false;
+
+    let mut refpll = noptica::Dpll::new(
+        noptica::Dpll::frequency_to_ftw(config.ref_min, config.sample_rate),
+        noptica::Dpll::frequency_to_ftw(config.ref_max, config.sample_rate),
+        config.refpll_ki,
+        config.refpll_kp);
+    let mut position_tracker = noptica::PositionTracker::new();
+    let mut position_decimator = noptica::Decimator::new(config.scan_decimation);
+
+    let abs_speed_nominal = 2.0*config.scan_displacement*config.scan_frequency;
+    let abs_speed_min = abs_speed_nominal*(1.0 - config.scan_speed_tol);
+    let abs_speed_max = abs_speed_nominal*(1.0 + config.scan_speed_tol);
+    let len_blanking_in = 2.0*config.scan_blanking/config.scan_frequency;
+    let len_smooth = (1.0 - 4.0*config.scan_blanking)/(2.0*config.scan_frequency);
+    let mut motion_tracker = MotionTracker::new(
+        (abs_speed_min/config.ref_wavelength*(noptica::Dpll::TURN as f64)) as i64,
+        (abs_speed_max/config.ref_wavelength*(noptica::Dpll::TURN as f64)) as i64,
+        (len_blanking_in*config.sample_rate) as u32,
+        (len_smooth*config.sample_rate) as u32);
+
+    noptica::sample(&config.sample_command, |rising, _falling| {
+        refpll.tick(rising & (1 << config.bit_ref) != 0);
+        let position = if rising & (1 << config.bit_meas) != 0 {
+            position_decimator.input(position_tracker.edge(refpll.get_phase_unwrapped()))
+        } else {
+            None
+        };
+        motion_tracker.tick(position,
+            |enter| {
+                if enter {
+                    counting_fringes = true;
+                    fringe_count = 0;
+                } else {
+                    counting_fringes = false;
+                    if fringe_count > 1 {
+                        let wavelength = (last_fringe_position - first_fringe_position).abs()/(fringe_count - 1);
+                        let wavelength_m = (wavelength as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
+                        println!("{:.3} nm", 1.0e9*wavelength_m);
+                    }
+                }
+            });
+        if counting_fringes && (rising & (1 << config.bit_input) != 0) {
+            let fringe_position = motion_tracker.extrapolated_position();
+            if fringe_count == 0 {
+                first_fringe_position = fringe_position;
+            }
+            last_fringe_position = fringe_position;
+            fringe_count += 1;
+        }
+    })
 }
 
 fn main() {

@@ -12,6 +12,8 @@
 
     "ref_wavelength": 632.991372e-9,
     "scan_displacement": 40e-6,
+    "scan_decimation": 30,
     "scan_frequency": 50.0,
+    "scan_speed_tol": 0.05,
     "scan_blanking": 0.05
 }
