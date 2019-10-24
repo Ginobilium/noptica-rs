@@ -32,10 +32,10 @@ index 35b8960..3f37b9f 100644
 +from .logic import LogicApplet
 diff --git a/software/glasgow/applet/logic.py b/software/glasgow/applet/logic.py
 new file mode 100644
-index 0000000..c58de0b
+index 0000000..3af2843
 --- /dev/null
 +++ b/software/glasgow/applet/logic.py
-@@ -0,0 +1,92 @@
+@@ -0,0 +1,94 @@
 +import sys
 +import logging
 +import os
@@ -121,6 +121,8 @@ index 0000000..c58de0b
 +        while True:
 +            data = await iface.read(65536)
 +            output_stream.write(data)
++            if output_stream.is_closing():
++                raise SystemExit("glasgow: stdout closed")
 +
 +# ------------------------------------------------------------------------------------------------
 +
