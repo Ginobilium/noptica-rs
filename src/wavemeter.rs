@@ -189,8 +189,8 @@ fn do_wavemeter(config: &Config) {
     let len_blanking_in = 2.0*config.scan_blanking/config.scan_frequency;
     let len_smooth = (1.0 - 4.0*config.scan_blanking)/(2.0*config.scan_frequency);
     let mut motion_tracker = MotionTracker::new(
-        (abs_speed_min/config.ref_wavelength*(noptica::Dpll::TURN as f64)) as i64,
-        (abs_speed_max/config.ref_wavelength*(noptica::Dpll::TURN as f64)) as i64,
+        (abs_speed_min/config.ref_wavelength*(noptica::Dpll::TURN as f64)/config.sample_rate) as i64,
+        (abs_speed_max/config.ref_wavelength*(noptica::Dpll::TURN as f64)/config.sample_rate) as i64,
         (len_blanking_in*config.sample_rate) as u32,
         (len_smooth*config.sample_rate) as u32);
 
