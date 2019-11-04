@@ -10,5 +10,8 @@
     "refpll_ki": 4294967,
     "refpll_kp": 85899345,
 
-    "ref_wavelength": 632.991372e-9
+    "ref_wavelength": 632.991372e-9,
+
+    "position_mon_time": 0.25,
+    "duty_cycle": 0.5
 }

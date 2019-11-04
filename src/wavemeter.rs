@@ -35,6 +35,9 @@ struct Config {
     refpll_kp: i64,         // Proportionality constant of the DPLL loop filter.
 
     ref_wavelength: f64,    // Wavelength of the reference laser in m.
+
+    position_mon_time: f64, // The time during which position is monitored to compute min/max
+    duty_cycle: f64         // Fraction of the scan used for counting input laser fringes
 }
 
 fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Error>> {
@@ -47,7 +50,7 @@ fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Erro
 fn do_calibrate(config: &Config) {
     let mut sample_count = 0;
     let avg_ref = (config.ref_min + config.ref_max)/2.0;
-    let max_sample_count = (avg_ref/4.0) as u32;
+    let max_sample_count = (avg_ref*config.position_mon_time) as u32;
     let mut position_min = i64::max_value();
     let mut position_max = i64::min_value();
 
@@ -125,19 +128,72 @@ fn do_wavemeter(config: &Config) {
     let mut position_tracker = noptica::PositionTracker::new();
     let mut motion_tracker = MotionTracker::new();
 
+    let mut position_min = i64::max_value();
+    let mut position_max = i64::min_value();
+    let avg_ref = (config.ref_min + config.ref_max)/2.0;
+    let max_position_sample_count = (avg_ref*config.position_mon_time) as u32;
+    let mut position_sample_count = 0;
+    let mut duty_min = i64::max_value();
+    let mut duty_max = i64::min_value();
+    let mut prev_in_duty = false;
+
+    let mut first_fringe = 0;
+    let mut fringe_count = 0;
+
     noptica::sample(&config.sample_command, |rising, _falling| {
         refpll.tick(rising & (1 << config.bit_ref) != 0);
         if refpll.locked() {
-            let position = if rising & (1 << config.bit_meas) != 0 {
-                Some(position_tracker.edge(refpll.get_phase_unwrapped()))
+            let position_opt;
+            if rising & (1 << config.bit_meas) != 0 {
+                let position = position_tracker.edge(refpll.get_phase_unwrapped());
+                if position > position_max {
+                    position_max = position;
+                }
+                if position < position_min {
+                    position_min = position;
+                }
+                position_sample_count += 1;
+                if position_sample_count == max_position_sample_count {
+                    let amplitude = position_max - position_min;
+                    let off_duty = ((amplitude as f64)*(1.0 - config.duty_cycle)) as i64;
+                    duty_min = position_min + off_duty/2;
+                    duty_max = position_max - off_duty/2;
+                    position_sample_count = 0;
+                }
+                position_opt = Some(position);
             } else {
-                None
+                position_opt = None
             };
-            motion_tracker.tick(position);
+            motion_tracker.tick(position_opt);
             if rising & (1 << config.bit_input) != 0 {
                 let fringe_position = motion_tracker.extrapolated_position();
-                println!("{}", (fringe_position as f64)/(noptica::Dpll::TURN as f64));
+                let in_duty = (duty_min < fringe_position) && (fringe_position < duty_max);
+                if in_duty & !prev_in_duty {
+                    first_fringe = fringe_position;
+                    fringe_count = 0;
+                }
+                if !in_duty & prev_in_duty {
+                    let wavelength = (fringe_position - first_fringe).abs()/fringe_count;
+                    let max_displacement = ((position_max-position_min) as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
+                    let displacement = ((fringe_position - first_fringe).abs() as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
+                    println!("{:.4} {} {:.2} {} {:.1}",
+                        (wavelength as f64)/(noptica::Dpll::TURN as f64)*1.0e9*config.ref_wavelength,
+                        fringe_count,
+                        1.0e6*max_displacement,
+                        if fringe_position > first_fringe { "UP  " } else { "DOWN" },
+                        1.0e9*displacement);
+                    fringe_count = 0;
+                }
+                fringe_count += 1;
+                prev_in_duty = in_duty;
             }
+        } else {
+            position_min = i64::max_value();
+            position_max = i64::min_value();
+            position_sample_count = 0;
+            duty_min = i64::max_value();
+            duty_max = i64::min_value();
+            prev_in_duty = false;
         }
     })
 }
