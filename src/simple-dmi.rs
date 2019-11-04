@@ -42,10 +42,12 @@ fn main() {
     let mut decimator = noptica::Decimator::new(config.decimation);
     noptica::sample(&config.sample_command, |rising, _falling| {
         refpll.tick(rising & (1 << config.bit_ref) != 0);
-        if rising & (1 << config.bit_meas) != 0 {
-            let position = position_tracker.edge(refpll.get_phase_unwrapped());
-            if let Some(position_avg) = decimator.input(position) {
-                println!("{}", position_avg);
+        if refpll.locked() {
+            if rising & (1 << config.bit_meas) != 0 {
+                let position = position_tracker.edge(refpll.get_phase_unwrapped());
+                if let Some(position_avg) = decimator.input(position) {
+                    println!("{}", position_avg);
+                }
             }
         }
     })

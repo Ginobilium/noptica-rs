@@ -59,20 +59,26 @@ fn do_calibrate(config: &Config) {
 
     noptica::sample(&config.sample_command, |rising, _falling| {
         refpll.tick(rising & (1 << config.bit_ref) != 0);
-        if rising & (1 << config.bit_meas) != 0 {
-            let position = position_tracker.edge(refpll.get_phase_unwrapped());
-            if position > position_max {
-                position_max = position;
+        if refpll.locked() {
+            if rising & (1 << config.bit_meas) != 0 {
+                let position = position_tracker.edge(refpll.get_phase_unwrapped());
+                if position > position_max {
+                    position_max = position;
+                }
+                if position < position_min {
+                    position_min = position;
+                }
             }
-            if position < position_min {
-                position_min = position;
-            }
-        }
 
-        sample_count += 1;
-        if sample_count == max_sample_count {
-            let displacement = ((position_max-position_min) as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
-            println!("{} um", 1.0e6*displacement);
+            sample_count += 1;
+            if sample_count == max_sample_count {
+                let displacement = ((position_max-position_min) as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
+                println!("{} um", 1.0e6*displacement);
+                sample_count = 0;
+                position_min = i64::max_value();
+                position_max = i64::min_value();
+            }
+        } else {
             sample_count = 0;
             position_min = i64::max_value();
             position_max = i64::min_value();
@@ -121,15 +127,17 @@ fn do_wavemeter(config: &Config) {
 
     noptica::sample(&config.sample_command, |rising, _falling| {
         refpll.tick(rising & (1 << config.bit_ref) != 0);
-        let position = if rising & (1 << config.bit_meas) != 0 {
-            Some(position_tracker.edge(refpll.get_phase_unwrapped()))
-        } else {
-            None
-        };
-        motion_tracker.tick(position);
-        if rising & (1 << config.bit_input) != 0 {
-            let fringe_position = motion_tracker.extrapolated_position();
-            println!("{}", (fringe_position as f64)/(noptica::Dpll::TURN as f64));
+        if refpll.locked() {
+            let position = if rising & (1 << config.bit_meas) != 0 {
+                Some(position_tracker.edge(refpll.get_phase_unwrapped()))
+            } else {
+                None
+            };
+            motion_tracker.tick(position);
+            if rising & (1 << config.bit_input) != 0 {
+                let fringe_position = motion_tracker.extrapolated_position();
+                println!("{}", (fringe_position as f64)/(noptica::Dpll::TURN as f64));
+            }
         }
     })
 }

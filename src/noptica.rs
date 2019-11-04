@@ -12,6 +12,9 @@ pub struct Dpll {
 
     phase: i64,
     phase_unwrapped: i64,
+
+    was_locked: bool,
+    wait_lock: Option<u32>
 }
 
 impl Dpll {
@@ -30,7 +33,9 @@ impl Dpll {
             ftw: init_ftw,
             integrator: init_ftw,
             phase: 0,
-            phase_unwrapped: 0
+            phase_unwrapped: 0,
+            was_locked: false,
+            wait_lock: Some(0)
         }
     }
 
@@ -47,11 +52,35 @@ impl Dpll {
                 self.ftw_min, self.ftw_max);
             self.ftw = clamp(self.integrator + (pe*self.kp >> 32),
                 self.ftw_min, self.ftw_max);
+
+            if pe.abs() <= (self.ftw + self.ftw/3) {
+                if let Some(wait_lock) = self.wait_lock {
+                    if wait_lock < 1000000 {
+                        self.wait_lock = Some(wait_lock + 1);
+                    } else {
+                        self.wait_lock = None;
+                    }
+                }
+            } else {
+                self.wait_lock = Some(0);
+            }
+
+            if self.locked() & !self.was_locked {
+                eprintln!("DPLL locked");
+            }
+            if !self.locked() & self.was_locked {
+                eprintln!("DPLL lost lock");
+            }
+            self.was_locked = self.locked();
         }
     }
 
     pub fn get_phase_unwrapped(&self) -> i64 {
         self.phase_unwrapped
+    }
+
+    pub fn locked(&self) -> bool {
+        self.wait_lock.is_none()
     }
 }
 
