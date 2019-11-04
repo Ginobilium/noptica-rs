@@ -105,27 +105,32 @@ impl PositionTracker {
     }
 }
 
-pub struct Decimator {
-    accumulator: i64,
+pub struct Decimator<T> {
+    accumulator: T,
     current_count: u32,
     max_count: u32
 }
 
-impl Decimator {
-    pub fn new(max_count: u32) -> Decimator {
+impl<T> Decimator<T> {
+    pub fn new(max_count: u32) -> Decimator<T> where T: std::convert::From<u32> {
         Decimator {
-            accumulator: 0,
+            accumulator: T::from(0),
             current_count: 0,
             max_count: max_count
         }
     }
 
-    pub fn input(&mut self, data: i64) -> Option<i64> {
+    pub fn input(&mut self, data: T) -> Option<T>
+            where T: Copy +
+                std::convert::From<u32> +
+                std::convert::From<<T as std::ops::Div>::Output> +
+                std::ops::AddAssign +
+                std::ops::Div {
         self.accumulator += data;
         self.current_count += 1;
         if self.current_count == self.max_count {
-            let average = self.accumulator/(self.current_count as i64);
-            self.accumulator = 0;
+            let average = T::from(self.accumulator/T::from(self.current_count));
+            self.accumulator = T::from(0);
             self.current_count = 0;
             Some(average)
         } else {
