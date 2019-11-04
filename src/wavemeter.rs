@@ -70,14 +70,13 @@ fn do_calibrate(config: &Config) {
                     position_min = position;
                 }
                 sample_count += 1;
-            }
-
-            if sample_count == max_sample_count {
-                let displacement = ((position_max-position_min) as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
-                println!("{} um", 1.0e6*displacement);
-                sample_count = 0;
-                position_min = i64::max_value();
-                position_max = i64::min_value();
+                if sample_count == max_sample_count {
+                    let displacement = ((position_max-position_min) as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
+                    println!("{} um", 1.0e6*displacement);
+                    sample_count = 0;
+                    position_min = i64::max_value();
+                    position_max = i64::min_value();
+                }
             }
         } else {
             sample_count = 0;
