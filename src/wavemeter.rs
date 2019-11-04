@@ -46,7 +46,8 @@ fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Erro
 
 fn do_calibrate(config: &Config) {
     let mut sample_count = 0;
-    let max_sample_count = (config.sample_rate/4.0) as u32;
+    let avg_ref = (config.ref_min + config.ref_max)/2.0;
+    let max_sample_count = (avg_ref/4.0) as u32;
     let mut position_min = i64::max_value();
     let mut position_max = i64::min_value();
 
@@ -68,9 +69,9 @@ fn do_calibrate(config: &Config) {
                 if position < position_min {
                     position_min = position;
                 }
+                sample_count += 1;
             }
 
-            sample_count += 1;
             if sample_count == max_sample_count {
                 let displacement = ((position_max-position_min) as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
                 println!("{} um", 1.0e6*displacement);
