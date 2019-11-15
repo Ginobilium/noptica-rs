@@ -47,50 +47,76 @@ fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Erro
     Ok(u)
 }
 
-fn do_calibrate(config: &Config) {
-    let mut sample_count = 0;
-    let avg_ref = (config.ref_min + config.ref_max)/2.0;
-    let max_sample_count = (avg_ref*config.position_mon_time) as u32;
-    let mut position_min = i64::max_value();
-    let mut position_max = i64::min_value();
+struct MinMaxMonitor {
+    cycle_sample_count: u32,
+    current_sample_count: u32,
+    current_position_min: i64,
+    current_position_max: i64,
+}
 
+impl MinMaxMonitor {
+    pub fn new(cycle_sample_count: u32) -> MinMaxMonitor {
+        MinMaxMonitor {
+            cycle_sample_count: cycle_sample_count,
+            current_sample_count: 0,
+            current_position_min: i64::max_value(),
+            current_position_max: i64::min_value(),
+            /*position_min: i64::max_value(),
+            position_max: i64::min_value(),
+            // Trick: position > position_middle is always false before the first monitor cycle.
+            position_middle: i64::max_value(),*/
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.current_sample_count = 0;
+        self.current_position_min = i64::max_value();
+        self.current_position_max = i64::min_value();
+    }
+
+    pub fn input(&mut self, position: i64, mut callback: impl FnMut(i64, i64)) {
+        if position > self.current_position_max {
+            self.current_position_max = position;
+        }
+        if position < self.current_position_min {
+            self.current_position_min = position;
+        }
+        self.current_sample_count += 1;
+        if self.current_sample_count == self.cycle_sample_count {
+            callback(self.current_position_min, self.current_position_max);
+            self.reset();
+        }
+    }
+}
+
+fn do_calibrate(config: &Config) {
     let mut refpll = noptica::Dpll::new(
         noptica::Dpll::frequency_to_ftw(config.ref_min, config.sample_rate),
         noptica::Dpll::frequency_to_ftw(config.ref_max, config.sample_rate),
         config.refpll_ki,
         config.refpll_kp);
     let mut position_tracker = noptica::PositionTracker::new();
+    let mut min_max_monitor = MinMaxMonitor::new(
+        ((config.ref_min + config.ref_max)/2.0*config.position_mon_time) as u32);
 
     noptica::sample(&config.sample_command, |rising, _falling| {
         refpll.tick(rising & (1 << config.bit_ref) != 0);
         if refpll.locked() {
             if rising & (1 << config.bit_meas) != 0 {
                 let position = position_tracker.edge(refpll.get_phase_unwrapped());
-                if position > position_max {
-                    position_max = position;
-                }
-                if position < position_min {
-                    position_min = position;
-                }
-                sample_count += 1;
-                if sample_count == max_sample_count {
-                    let displacement = ((position_max-position_min) as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
-                    println!("{} um", 1.0e6*displacement);
-                    sample_count = 0;
-                    position_min = i64::max_value();
-                    position_max = i64::min_value();
-                }
+                min_max_monitor.input(position, |min, max| {
+                    let displacement = ((max - min) as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
+                    println!("{:.1} um", 1.0e6*displacement);
+                });
             }
         } else {
-            sample_count = 0;
-            position_min = i64::max_value();
-            position_max = i64::min_value();
+            min_max_monitor.reset();
         }
     })
 }
 
 
-pub struct MotionTracker {
+struct MotionTracker {
     last_position: i64,
     last_position_ago: u32,
     speed: i64
@@ -127,12 +153,17 @@ fn do_wavemeter(config: &Config) {
         config.refpll_kp);
     let mut position_tracker = noptica::PositionTracker::new();
     let mut motion_tracker = MotionTracker::new();
+    let mut min_max_monitor = MinMaxMonitor::new(
+        ((config.ref_min + config.ref_max)/2.0*config.position_mon_time) as u32);
 
-    let mut position_min = i64::max_value();
-    let mut position_max = i64::min_value();
-    let avg_ref = (config.ref_min + config.ref_max)/2.0;
-    let max_position_sample_count = (avg_ref*config.position_mon_time) as u32;
-    let mut position_sample_count = 0;
+    // Update duty_min and duty_max when the position is near the middle
+    // to avoid glitches.
+    let mut prev_position_above_middle = false;
+    // Trick: position > position_middle is always false before the first monitor cycle.
+    let mut position_middle = i64::max_value();
+    let mut new_duty_min = i64::max_value();
+    let mut new_duty_max = i64::min_value();
+
     let mut duty_min = i64::max_value();
     let mut duty_max = i64::min_value();
     let mut prev_in_duty = false;
@@ -146,25 +177,25 @@ fn do_wavemeter(config: &Config) {
             let position_opt;
             if rising & (1 << config.bit_meas) != 0 {
                 let position = position_tracker.edge(refpll.get_phase_unwrapped());
-                if position > position_max {
-                    position_max = position;
-                }
-                if position < position_min {
-                    position_min = position;
-                }
-                position_sample_count += 1;
-                if position_sample_count == max_position_sample_count {
+                min_max_monitor.input(position, |position_min, position_max| {
                     let amplitude = position_max - position_min;
                     let off_duty = ((amplitude as f64)*(1.0 - config.duty_cycle)) as i64;
-                    duty_min = position_min + off_duty/2;
-                    duty_max = position_max - off_duty/2;
-                    position_sample_count = 0;
+                    new_duty_min = position_min + off_duty/2;
+                    new_duty_max = position_max - off_duty/2;
+                    position_middle = (position_max + position_min)/2;
+                });
+                let position_above_middle = position > position_middle;
+                if !position_above_middle && prev_position_above_middle {
+                    duty_min = new_duty_min;
+                    duty_max = new_duty_max;
                 }
+                prev_position_above_middle = position_above_middle;
                 position_opt = Some(position);
             } else {
                 position_opt = None
             };
             motion_tracker.tick(position_opt);
+
             if rising & (1 << config.bit_input) != 0 {
                 let fringe_position = motion_tracker.extrapolated_position();
                 let in_duty = (duty_min < fringe_position) && (fringe_position < duty_max);
@@ -174,12 +205,10 @@ fn do_wavemeter(config: &Config) {
                 }
                 if !in_duty & prev_in_duty {
                     let wavelength = (fringe_position - first_fringe).abs()/fringe_count;
-                    let max_displacement = ((position_max-position_min) as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
                     let displacement = ((fringe_position - first_fringe).abs() as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
-                    println!("{:.4} {} {:.2} {} {:.1}",
+                    println!("{:.4} {} {} {:.1}",
                         (wavelength as f64)/(noptica::Dpll::TURN as f64)*1.0e9*config.ref_wavelength,
                         fringe_count,
-                        1.0e6*max_displacement,
                         if fringe_position > first_fringe { "UP  " } else { "DOWN" },
                         1.0e9*displacement);
                     fringe_count = 0;
@@ -188,9 +217,13 @@ fn do_wavemeter(config: &Config) {
                 prev_in_duty = in_duty;
             }
         } else {
-            position_min = i64::max_value();
-            position_max = i64::min_value();
-            position_sample_count = 0;
+            min_max_monitor.reset();
+
+            prev_position_above_middle = false;
+            position_middle = i64::max_value();
+            new_duty_min = i64::max_value();
+            new_duty_max = i64::min_value();
+
             duty_min = i64::max_value();
             duty_max = i64::min_value();
             prev_in_duty = false;
