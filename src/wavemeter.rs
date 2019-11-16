@@ -61,10 +61,6 @@ impl MinMaxMonitor {
             current_sample_count: 0,
             current_position_min: i64::max_value(),
             current_position_max: i64::min_value(),
-            /*position_min: i64::max_value(),
-            position_max: i64::min_value(),
-            // Trick: position > position_middle is always false before the first monitor cycle.
-            position_middle: i64::max_value(),*/
         }
     }
 
