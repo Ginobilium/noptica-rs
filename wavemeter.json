@@ -15,5 +15,7 @@
     "position_mon_time": 0.25,
     "duty_cycle": 0.9,
 
-    "motion_cutoff": 100e3
+    "debug": false,
+    "motion_cutoff": 100e3,
+    "decimation": 50
 }

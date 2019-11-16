@@ -40,7 +40,9 @@ struct Config {
     position_mon_time: f64, // The time during which position is monitored to compute min/max
     duty_cycle: f64,        // Fraction of the scan used for counting input laser fringes
 
+    debug: bool,            // Enable debug output of wavelength determination code
     motion_cutoff: f64,     // Cut-off frequency of the motion filter
+    decimation: u32,        // Decimation/averaging factor for the final wavelength output
 }
 
 fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Error>> {
@@ -145,6 +147,7 @@ fn do_wavemeter(config: &Config) {
 
     let mut first_fringe = 0;
     let mut fringe_count = 0;
+    let mut decimator = noptica::Decimator::new(config.decimation);
 
     noptica::sample(&config.sample_command, |rising, _falling| {
         refpll.tick(rising & (1 << config.bit_ref) != 0);
@@ -176,13 +179,19 @@ fn do_wavemeter(config: &Config) {
                 }
                 if !in_duty & prev_in_duty {
                     let wavelength = (fringe_position - first_fringe).abs()/fringe_count;
-                    let displacement = ((fringe_position - first_fringe).abs() as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
-                    println!("{:.4} {} {} {:.1}",
-                        (wavelength as f64)/(noptica::Dpll::TURN as f64)*1.0e9*config.ref_wavelength,
-                        fringe_count,
-                        if fringe_position > first_fringe { "UP  " } else { "DOWN" },
-                        1.0e9*displacement);
+                    let wavelength_nm = (wavelength as f64)/(noptica::Dpll::TURN as f64)*1.0e9*config.ref_wavelength;
+                    if config.debug {
+                        let displacement = ((fringe_position - first_fringe).abs() as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
+                        println!("DEBUG: {:.4} {} {} {:.1}",
+                            wavelength_nm,
+                            fringe_count,
+                            if fringe_position > first_fringe { "UP  " } else { "DOWN" },
+                            1.0e9*displacement);
+                    }
                     fringe_count = 0;
+                    if let Some(wavelength_nm) = decimator.input(wavelength_nm) {
+                        println!("{:.4} nm", wavelength_nm);
+                    }
                 }
                 fringe_count += 1;
                 prev_in_duty = in_duty;
