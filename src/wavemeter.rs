@@ -2,10 +2,11 @@ extern crate argparse;
 extern crate num_traits;
 extern crate serde_derive;
 extern crate serde_json;
+extern crate biquad;
 
 use argparse::{ArgumentParser, StoreTrue, Store};
-
 use serde_derive::Deserialize;
+use biquad::Biquad;
 
 use std::error::Error;
 use std::fs::File;
@@ -37,7 +38,9 @@ struct Config {
     ref_wavelength: f64,    // Wavelength of the reference laser in m.
 
     position_mon_time: f64, // The time during which position is monitored to compute min/max
-    duty_cycle: f64         // Fraction of the scan used for counting input laser fringes
+    duty_cycle: f64,        // Fraction of the scan used for counting input laser fringes
+
+    motion_cutoff: f64,     // Cut-off frequency of the motion filter
 }
 
 fn read_config_from_file<P: AsRef<Path>>(path: P) -> Result<Config, Box<dyn Error>> {
@@ -111,36 +114,6 @@ fn do_calibrate(config: &Config) {
     })
 }
 
-
-struct MotionTracker {
-    last_position: i64,
-    last_position_ago: u32,
-    speed: i64
-}
-
-impl MotionTracker {
-    pub fn new() -> MotionTracker {
-        MotionTracker {
-            last_position: 0,
-            last_position_ago: 0,
-            speed: 0
-        }
-    }
-
-    pub fn extrapolated_position(&self) -> i64 {
-        self.last_position + self.speed*(self.last_position_ago as i64)
-    }
-
-    pub fn tick(&mut self, position: Option<i64>) {
-        self.last_position_ago += 1;
-        if let Some(position) = position {
-            self.speed = (position - self.last_position)/(self.last_position_ago as i64);
-            self.last_position = position;
-            self.last_position_ago = 0;
-        }
-    }
-}
-
 fn do_wavemeter(config: &Config) {
     let mut refpll = noptica::Dpll::new(
         noptica::Dpll::frequency_to_ftw(config.ref_min, config.sample_rate),
@@ -148,9 +121,15 @@ fn do_wavemeter(config: &Config) {
         config.refpll_ki,
         config.refpll_kp);
     let mut position_tracker = noptica::PositionTracker::new();
-    let mut motion_tracker = MotionTracker::new();
+    let mut position = 0;
     let mut min_max_monitor = MinMaxMonitor::new(
         ((config.ref_min + config.ref_max)/2.0*config.position_mon_time) as u32);
+    let motion_filter_coeffs = biquad::Coefficients::<f64>::from_params(
+        biquad::Type::LowPass,
+        biquad::frequency::Hertz::<f64>::from_hz(config.sample_rate).unwrap(),
+        biquad::frequency::Hertz::<f64>::from_hz(config.motion_cutoff).unwrap(),
+        biquad::Q_BUTTERWORTH_F64).unwrap();
+    let mut motion_filter = biquad::DirectForm2Transposed::<f64>::new(motion_filter_coeffs);
 
     // Update duty_min and duty_max when the position is near the middle
     // to avoid glitches.
@@ -170,9 +149,8 @@ fn do_wavemeter(config: &Config) {
     noptica::sample(&config.sample_command, |rising, _falling| {
         refpll.tick(rising & (1 << config.bit_ref) != 0);
         if refpll.locked() {
-            let position_opt;
             if rising & (1 << config.bit_meas) != 0 {
-                let position = position_tracker.edge(refpll.get_phase_unwrapped());
+                position = position_tracker.edge(refpll.get_phase_unwrapped());
                 min_max_monitor.input(position, |position_min, position_max| {
                     let amplitude = position_max - position_min;
                     let off_duty = ((amplitude as f64)*(1.0 - config.duty_cycle)) as i64;
@@ -186,14 +164,11 @@ fn do_wavemeter(config: &Config) {
                     duty_max = new_duty_max;
                 }
                 prev_position_above_middle = position_above_middle;
-                position_opt = Some(position);
-            } else {
-                position_opt = None
-            };
-            motion_tracker.tick(position_opt);
+            }
+            let filtered_position = motion_filter.run(position as f64) as i64;
 
             if rising & (1 << config.bit_input) != 0 {
-                let fringe_position = motion_tracker.extrapolated_position();
+                let fringe_position = filtered_position;
                 let in_duty = (duty_min < fringe_position) && (fringe_position < duty_max);
                 if in_duty & !prev_in_duty {
                     first_fringe = fringe_position;
@@ -213,6 +188,7 @@ fn do_wavemeter(config: &Config) {
                 prev_in_duty = in_duty;
             }
         } else {
+            position = 0;
             min_max_monitor.reset();
 
             prev_position_above_middle = false;

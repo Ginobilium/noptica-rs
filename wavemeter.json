@@ -13,5 +13,7 @@
     "ref_wavelength": 632.991372e-9,
 
     "position_mon_time": 0.25,
-    "duty_cycle": 0.9
+    "duty_cycle": 0.9,
+
+    "motion_cutoff": 100e3
 }
