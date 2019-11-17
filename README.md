@@ -21,7 +21,7 @@ While this reduced range of motion corresponds to a similar reduction in resolut
 Recommended reading
 -------------------
 
-We assume that the reader has a basic understanding of the principles of displacement measurement interferometers using two-frequency lasers, of traveling Michelson wavemeters. The links below provide a good introduction to them.
+We assume that the reader has a basic understanding of the principles of displacement measurement interferometers using two-frequency lasers, and of traveling Michelson wavemeters. The links below provide a good introduction to them.
 
 * http://www.repairfaq.org/sam/laserlia.htm#liaint2fl
 * https://www.ph.unimelb.edu.au/~scholten/atomopt/publications/wavemeter_amjphys_vol67_p624_1999.pdf
@@ -51,7 +51,7 @@ Those two components, the DPLL and the position tracker, are enough to form a ba
 The wavemeter cannot use the raw output of the position tracker for two reasons:
 
 1. The resolution (due to the digital sampling) is only approximately 633nm\*2MHz/48MHz = 26nm.
-2. MEAS edges, and therefore position updates, only arrive on average at the REF frequency, around 2MHz. The last update can be as old as roughly 0.5µs. For an optical path displacement of 2mm that is traveled in 10ms, using the last position introduces an error of roughly 2mm/10ms\*0.5µs = 100nm.
+2. MEAS edges, and therefore position updates, only arrive on average at the REF frequency, around 2MHz. The last update can be as old as roughly 0.5µs. For an optical path displacement of 2mm that is traveled in 10ms, using the last position introduces an error of roughly 2mm/10ms\*0.5µs = 100nm (NB: This is just a ballpark number, the speed varies as the motion of the corner cube is roughly sinusoidal, and the MEAS frequency also varies depending on the speed and direction of motion of the cube).
 
 Those sources of noise are attenuated using a digital filter. First, the position signal (whose rate of updates varies due to REF instability and the Doppler effect on MEAS) is resampled to a constant 48MHz by duplicating samples. This is followed by a biquad IIR low-pass filter.
 
