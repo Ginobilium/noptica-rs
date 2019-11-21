@@ -81,10 +81,10 @@ Software
 
 The software in this repository is licensed under the GNU Lesser General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See the LICENSE file.
 
-To build, install Rust and Cargo and run ``cargo build --release``. This will produce binaries in the ``target`` directory. Do not forget the ``--release`` flag, as the software without the compiler optimizations is too slow for real-time processing. You will also need to install the Glasgow software to run the program.
+To build, install Rust and Cargo and run ``cargo build --release``. This will produce binaries in the ``target`` directory. Do not forget the ``--release`` flag, as the software without the compiler optimizations is too slow for real-time processing. You will also need to install the Glasgow software (with the provided patch that adds the logic analyzer applet) to run the program.
 
 The ``plot.py`` DMI demo requires Python with PyQtGraph and Quamash.
 
-This has been tested on Linux only, and may or may not work on Windows.
+All of the above has been tested on Linux only, and may or may not work on Windows.
 
-If you are using Nix, running ``nix-shell`` will set up Rust, Cargo, Glasgow and Python for you.
+If you are using Nix, running ``nix-shell`` will set up Rust, Cargo, patched Glasgow, and Python for you.
