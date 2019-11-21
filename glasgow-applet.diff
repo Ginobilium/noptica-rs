@@ -1,3 +1,5 @@
+Written by whitequark, 2019.
+
 diff --git a/software/glasgow/access/direct/demultiplexer.py b/software/glasgow/access/direct/demultiplexer.py
 index 3df8c2e..068b40e 100644
 --- a/software/glasgow/access/direct/demultiplexer.py

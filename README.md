@@ -79,7 +79,9 @@ Current status
 Software
 --------
 
-The software in this repository is licensed under the GNU Lesser General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See the LICENSE file.
+The software in this repository is copyright (C) 2019 Sébastien Bourdeauducq and licensed under the GNU Lesser General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See the LICENSE file.
+
+Basically, do whatever you want with this program, but keep the core open. I'm fed up with proprietary laser equipment with pricing through the roof, salespeople wearing ties, and hobbyist-hostile policies.
 
 To build, install Rust and Cargo and run ``cargo build --release``. This will produce binaries in the ``target`` directory. Do not forget the ``--release`` flag, as the software without the compiler optimizations is too slow for real-time processing. You will also need to install the Glasgow software (with the provided patch that adds the logic analyzer applet) to run the program.
 
