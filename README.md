@@ -61,7 +61,7 @@ The rest of the wavemeter algorithm is fairly straightforward. The minimum and m
 Shopping list
 -------------
 
-* Reference laser: HP 5501B from eBay. Those are exceptionally well-built and documented, making diagnostics and repairs easier.
+* Reference laser: HP 5501B from eBay. Those are exceptionally well-built and documented, making diagnostics and repairs easier. It is also possible to make something similar yourself, see Sam's instructions.
 * Photodetectors: HP 10780 from eBay. With the operating parameters of the prototype, the frequency of the input laser fringes is high enough during the useful portion of the corner cube's trajectory that the 10780's cut-off frequency is not an issue. The advantages of those devices are the built-in polarizers, the alignment aids, and the well-designed relatively fast photodiode amplifiers and detectors. In case a 10780A does need modifications, the schematics are here: http://repairfaq.cis.upenn.edu/Misc/Lasers/hp/hp10780.jpg. The mating connector for the round 4-pin connector on the HP 10780 is extremely rare and expensive; one way to deal with them is to replace them with Chinese "XS9-4" connectors.
 * Logic analyzer: Glasgow https://github.com/GlasgowEmbedded/Glasgow (Sigrok + fx2lafw was initially attempted, but abandoned due to USB bugs at high sample rates).
 * Interface to the logic analyzer: the "line receiver" part of http://www.repairfaq.org/sam/uMD1/uMD1.htm
@@ -74,3 +74,17 @@ Current status
 * Prototype built, wavelength output (with unstabilized HeNe tube as input) is stable at <2pm level.
 * Design may contain errors and things that can be simplified or optimized further. This is a highly experimental system and YMMV.
 * HP 5501B lasers do not like light (at any wavelength) sent into their aperture; the stabilization circuit fails and the REF output becomes wrong. Workaround is to misalign the input beam, which obviously introduces cosine error. A better solution is needed, maybe rebuild a 2-frequency HeNe but use the waste beam of the tube for REF/intensity measurements unlike the HP design. The HeNe tube itself attenuates incoming light.
+
+
+Software
+--------
+
+The software in this repository is licensed under the GNU Lesser General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See the LICENSE file.
+
+To build, install Rust and Cargo and run ``cargo build --release``. This will produce binaries in the ``target`` directory. Do not forget the ``--release`` flag, as the software without the compiler optimizations is too slow for real-time processing. You will also need to install the Glasgow software to run the program.
+
+The ``plot.py`` DMI demo requires Python with PyQtGraph and Quamash.
+
+This has been tested on Linux only, and may or may not work on Windows.
+
+If you are using Nix, running ``nix-shell`` will set up Rust, Cargo, Glasgow and Python for you.
