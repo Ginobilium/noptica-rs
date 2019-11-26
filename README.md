@@ -30,6 +30,8 @@ We assume that the reader has a basic understanding of the principles of displac
 Detailed description
 --------------------
 
+![Block diagram](diagram.png)
+
 The core of the design is a displacement measurement interferometer with a corner cube moving back and forth, and the input laser superimposed on the DMI beam but propagating in the opposite direction. The input laser traverses the same optical path as the DMI beam, interferes with itself, and produces a bright or dark spot at the photodetector depending on the optical path difference between the two arms of the interferometer. Meanwhile, the DMI constantly measures this optical path difference, which it can do precisely as its beam is superimposed with the input beam. The distance, as measured by the DMI, between bright and dark spots (fringes) corresponds to the wavelength of the input laser.
 
 To improve precision, a distance measurement is taken for several thousands of consecutive input laser fringes, for about one half-cycle ("scan") of the corner cube motion. The distance between the first and last fringe is divided by the number of intervals between fringes that have been counted during the scan.
