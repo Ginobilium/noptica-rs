@@ -77,6 +77,8 @@ Current status
 * Design may contain errors and things that can be simplified or optimized further. This is a highly experimental system and YMMV.
 * HP 5501B lasers do not like light (at any wavelength) sent into their aperture; the stabilization circuit fails and the REF output becomes wrong. Workaround is to misalign the input beam, which obviously introduces cosine error. A better solution is needed, maybe rebuild a 2-frequency HeNe but use the waste beam of the tube for REF/intensity measurements unlike the HP design. The HeNe tube itself attenuates incoming light.
 
+Questions, comments: email sb [AT] m-labs.hk
+
 
 Software
 --------
