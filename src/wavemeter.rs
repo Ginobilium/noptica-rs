@@ -116,6 +116,91 @@ fn do_calibrate(config: &Config) {
     })
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Quadrant {
+    BelowMin,
+    Up,
+    AboveMax,
+    Down
+}
+
+#[derive(Clone)]
+struct QuadrantTracker {
+    state: Quadrant,
+    min: i64,
+    max: i64,
+    new_min: i64,
+    new_max: i64,
+    prev_above_middle: bool,
+    middle: i64,
+}
+
+impl QuadrantTracker {
+    pub fn new() -> QuadrantTracker {
+        QuadrantTracker {
+            state: Quadrant::BelowMin,
+            min: i64::max_value(),
+            max: i64::min_value(),
+            new_min: i64::max_value(),
+            new_max: i64::min_value(),
+            prev_above_middle: false,
+            middle: i64::max_value(),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        *self = QuadrantTracker::new();
+    }
+
+    pub fn input(&mut self, position: i64) {
+        let above_min = position > self.min;  // always false before init
+        let below_max = position < self.max;  // always false before init
+        let next_state;
+        if above_min && below_max {
+            next_state = match self.state {
+                Quadrant::BelowMin => Quadrant::Up,
+                Quadrant::Up => Quadrant::Up,
+                Quadrant::AboveMax => Quadrant::Down,
+                Quadrant::Down => Quadrant::Down
+            }
+        } else {
+            if above_min {
+                next_state = Quadrant::AboveMax;
+            } else {
+                next_state = Quadrant::BelowMin;  // stays here before init
+            }
+        }
+
+        if self.state != next_state {
+            match (self.state, next_state) {
+                (Quadrant::BelowMin, Quadrant::Up) => (),
+                (Quadrant::Up, Quadrant::AboveMax) => (),
+                (Quadrant::AboveMax, Quadrant::Down) => (),
+                (Quadrant::Down, Quadrant::BelowMin) => (),
+                _ => eprintln!("invalid quadrant transition: {:?} -> {:?}",
+                    self.state, next_state)
+            }
+            self.state = next_state;
+        }
+
+
+        // Update min and max when the position is near the middle
+        // to avoid glitches.
+        let above_middle = position > self.middle;  // always false before init
+        if above_middle && !self.prev_above_middle {
+            self.min = self.new_min;
+            self.max = self.new_max;
+        }
+        self.prev_above_middle = above_middle;
+    }
+
+    pub fn update_limits(&mut self, min: i64, max: i64) {
+        self.new_min = min;
+        self.new_max = max;
+        self.middle = (min + max)/2;
+    }
+}
+
 fn do_wavemeter(config: &Config) {
     let mut refpll = noptica::Dpll::new(
         noptica::Dpll::frequency_to_ftw(config.ref_min, config.sample_rate),
@@ -124,90 +209,34 @@ fn do_wavemeter(config: &Config) {
         config.refpll_kp);
     let mut position_tracker = noptica::PositionTracker::new();
     let mut position = 0;
-    let mut min_max_monitor = MinMaxMonitor::new(
-        ((config.ref_min + config.ref_max)/2.0*config.position_mon_time) as u32);
     let motion_filter_coeffs = biquad::Coefficients::<f64>::from_params(
         biquad::Type::LowPass,
         biquad::frequency::Hertz::<f64>::from_hz(config.sample_rate).unwrap(),
         biquad::frequency::Hertz::<f64>::from_hz(config.motion_cutoff).unwrap(),
         biquad::Q_BUTTERWORTH_F64).unwrap();
     let mut motion_filter = biquad::DirectForm2Transposed::<f64>::new(motion_filter_coeffs);
-
-    // Update duty_min and duty_max when the position is near the middle
-    // to avoid glitches.
-    let mut prev_position_above_middle = false;
-    // Trick: position > position_middle is always false before the first monitor cycle.
-    let mut position_middle = i64::max_value();
-    let mut new_duty_min = i64::max_value();
-    let mut new_duty_max = i64::min_value();
-
-    let mut duty_min = i64::max_value();
-    let mut duty_max = i64::min_value();
-    let mut prev_in_duty = false;
-
-    let mut first_fringe = 0;
-    let mut fringe_count = 0;
-    let mut decimator = noptica::Decimator::new(config.decimation);
+    let mut min_max_monitor = MinMaxMonitor::new((config.sample_rate*config.position_mon_time) as u32);
+    let mut quadrant_tracker = QuadrantTracker::new();
 
     noptica::sample(&config.sample_command, |rising, _falling| {
         refpll.tick(rising & (1 << config.bit_ref) != 0);
         if refpll.locked() {
             if rising & (1 << config.bit_meas) != 0 {
                 position = position_tracker.edge(refpll.get_phase_unwrapped());
-                min_max_monitor.input(position, |position_min, position_max| {
-                    let amplitude = position_max - position_min;
-                    let off_duty = ((amplitude as f64)*(1.0 - config.duty_cycle)) as i64;
-                    new_duty_min = position_min + off_duty/2;
-                    new_duty_max = position_max - off_duty/2;
-                    position_middle = (position_max + position_min)/2;
-                });
-                let position_above_middle = position > position_middle;
-                if !position_above_middle && prev_position_above_middle {
-                    duty_min = new_duty_min;
-                    duty_max = new_duty_max;
-                }
-                prev_position_above_middle = position_above_middle;
             }
-            let filtered_position = motion_filter.run(position as f64) as i64;
-
-            if rising & (1 << config.bit_input) != 0 {
-                let fringe_position = filtered_position;
-                let in_duty = (duty_min < fringe_position) && (fringe_position < duty_max);
-                if in_duty & !prev_in_duty {
-                    first_fringe = fringe_position;
-                    fringe_count = 0;
-                }
-                if !in_duty & prev_in_duty {
-                    let wavelength = (fringe_position - first_fringe).abs()/fringe_count;
-                    let wavelength_nm = (wavelength as f64)/(noptica::Dpll::TURN as f64)*1.0e9*config.ref_wavelength;
-                    if config.debug {
-                        let displacement = ((fringe_position - first_fringe).abs() as f64)/(noptica::Dpll::TURN as f64)*config.ref_wavelength;
-                        println!("DEBUG: {:.4} {} {} {:.1}",
-                            wavelength_nm,
-                            fringe_count,
-                            if fringe_position > first_fringe { "UP  " } else { "DOWN" },
-                            1.0e9*displacement);
-                    }
-                    fringe_count = 0;
-                    if let Some(wavelength_nm) = decimator.input(wavelength_nm) {
-                        println!("{:.4} nm", wavelength_nm);
-                    }
-                }
-                fringe_count += 1;
-                prev_in_duty = in_duty;
-            }
+            let f_position = motion_filter.run(position as f64) as i64;
+            min_max_monitor.input(f_position, |position_min, position_max| {
+                let amplitude = position_max - position_min;
+                let off_duty = ((amplitude as f64)*(1.0 - config.duty_cycle)) as i64;
+                quadrant_tracker.update_limits(
+                    position_min + off_duty/2,
+                    position_max - off_duty/2);
+            });
+            quadrant_tracker.input(f_position);
         } else {
             position = 0;
             min_max_monitor.reset();
-
-            prev_position_above_middle = false;
-            position_middle = i64::max_value();
-            new_duty_min = i64::max_value();
-            new_duty_max = i64::min_value();
-
-            duty_min = i64::max_value();
-            duty_max = i64::min_value();
-            prev_in_duty = false;
+            quadrant_tracker.reset();
         }
     })
 }
