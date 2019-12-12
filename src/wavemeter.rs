@@ -126,6 +126,7 @@ enum Quadrant {
 
 #[derive(Clone)]
 struct QuadrantTracker {
+    prev_state: Quadrant,
     state: Quadrant,
     min: i64,
     max: i64,
@@ -138,6 +139,7 @@ struct QuadrantTracker {
 impl QuadrantTracker {
     pub fn new() -> QuadrantTracker {
         QuadrantTracker {
+            prev_state: Quadrant::BelowMin,
             state: Quadrant::BelowMin,
             min: i64::max_value(),
             max: i64::min_value(),
@@ -171,6 +173,7 @@ impl QuadrantTracker {
             }
         }
 
+        self.prev_state = self.state;
         if self.state != next_state {
             match (self.state, next_state) {
                 (Quadrant::BelowMin, Quadrant::Up) => (),
@@ -198,6 +201,22 @@ impl QuadrantTracker {
         self.new_min = min;
         self.new_max = max;
         self.middle = (min + max)/2;
+    }
+
+    pub fn up_start(&self) -> bool {
+        self.prev_state == Quadrant::BelowMin && self.state == Quadrant::Up
+    }
+
+    pub fn up_end(&self) -> bool {
+        self.prev_state == Quadrant::Up && self.state == Quadrant::AboveMax
+    }
+
+    pub fn down_start(&self) -> bool {
+        self.prev_state == Quadrant::AboveMax && self.state == Quadrant::Down
+    }
+
+    pub fn down_end(&self) -> bool {
+        self.prev_state == Quadrant::Down && self.state == Quadrant::BelowMin
     }
 }
 
