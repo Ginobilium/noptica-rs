@@ -22,4 +22,7 @@ in
       (pkgs.python3.withPackages(ps: [ps.quamash ps.pyqt5 pyqtgraph-qt5]))
       pkgs.rustc pkgs.cargo
     ];
+
+    # Hack: shut up rustc complaint "#![feature] may not be used on the stable release channel"
+    RUSTC_BOOTSTRAP = "1";
   }

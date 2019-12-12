@@ -17,5 +17,7 @@
 
     "debug": false,
     "motion_cutoff": 100e3,
+    "min_fringes": 1000,
+    "fringe_jitter_tol": 0.05,
     "decimation": 50
 }

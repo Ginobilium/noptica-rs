@@ -1,3 +1,5 @@
+#![feature(generators, generator_trait)]
+
 extern crate argparse;
 extern crate num_traits;
 extern crate serde_derive;
@@ -12,6 +14,9 @@ use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use std::ops::{Generator, GeneratorState};
+use std::pin::Pin;
+use std::cell::Cell;
 
 mod noptica;
 
@@ -42,6 +47,8 @@ struct Config {
 
     debug: bool,            // Enable debug output of wavelength determination code
     motion_cutoff: f64,     // Cut-off frequency of the motion filter
+    min_fringes: u32,       // Minimum number of fringes to count
+    fringe_jitter_tol: f64, // Tolerance for fringe distance jitter
     decimation: u32,        // Decimation/averaging factor for the final wavelength output
 }
 
@@ -220,6 +227,17 @@ impl QuadrantTracker {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum FringeCounterEvent {
+    Start,
+    Fringe(i64),
+    End,
+}
+
+macro_rules! generator_input {
+    ($e:expr) => ({ yield (); $e.get() })
+}
+
 fn do_wavemeter(config: &Config) {
     let mut refpll = noptica::Dpll::new(
         noptica::Dpll::frequency_to_ftw(config.ref_min, config.sample_rate),
@@ -237,6 +255,111 @@ fn do_wavemeter(config: &Config) {
     let mut min_max_monitor = MinMaxMonitor::new((config.sample_rate*config.position_mon_time) as u32);
     let mut quadrant_tracker = QuadrantTracker::new();
 
+    let fringe_counter_input = Cell::new(FringeCounterEvent::Start);
+    let mut fringe_counter = || {
+        'outer: loop {
+            loop {
+                if let FringeCounterEvent::Start = generator_input!(fringe_counter_input) {
+                    break;
+                }
+            }
+
+            let mut boundary_fringes = [0i64; 4];
+            for i in 0..4 {
+                if let FringeCounterEvent::Fringe(position) = generator_input!(fringe_counter_input) {
+                    boundary_fringes[i] = position;
+                } else {
+                    eprintln!("unexpected event (boundary fringe acquisition)");
+                    continue 'outer;
+                }
+            }
+
+            let mut fringes_between_boundary = 0;
+            loop {
+                match generator_input!(fringe_counter_input) {
+                    FringeCounterEvent::Start => {
+                        eprintln!("unexpected event (initial fringe counting)");
+                        continue 'outer;
+                    },
+                    FringeCounterEvent::Fringe(position) => {
+                        boundary_fringes[2] = boundary_fringes[3];
+                        boundary_fringes[3] = position;
+                        fringes_between_boundary += 1;
+                    },
+                    FringeCounterEvent::End => break,
+                }
+            }
+
+            if fringes_between_boundary < config.min_fringes {
+                eprintln!("insufficient fringes between boundary ({})", fringes_between_boundary);
+                continue 'outer;
+            }
+
+            let nominal_distance = boundary_fringes[1] - boundary_fringes[0];
+            let jitter_tol = ((nominal_distance as f64)*config.fringe_jitter_tol) as i64;
+
+            let limit1 = (boundary_fringes[0] + boundary_fringes[1])/2;
+            let limit2 = (boundary_fringes[2] + boundary_fringes[3])/2;
+            let expected_fringes = fringes_between_boundary + 2;
+            let mut f1_acc = boundary_fringes[1];
+            let mut f2_acc = boundary_fringes[2];
+
+            for _ in 0..config.decimation-1 {
+                loop {
+                    if let FringeCounterEvent::Start = generator_input!(fringe_counter_input) {
+                        break;
+                    }
+                }
+                let mut last_fringe: Option<i64> = None;
+                let mut count: u32 = 0;
+                loop {
+                    match generator_input!(fringe_counter_input) {
+                        FringeCounterEvent::Start => {
+                            eprintln!("unexpected event (secondary fringe counting)");
+                            continue 'outer;
+                        },
+                        FringeCounterEvent::Fringe(position) => {
+                            if (position > limit1) && (position < limit2)
+                                    || (position > limit2) && (position < limit1) {
+                                if let Some(last_fringe) = last_fringe {
+                                    let distance = position - last_fringe;
+                                    if (distance - nominal_distance).abs() > jitter_tol {
+                                        eprintln!("distance between fringes above tolerance (got {}, nominal {})",
+                                            distance, nominal_distance);
+                                        continue 'outer;
+                                    }
+                                }
+                                last_fringe = Some(position);
+                                count += 1;
+                                if count == 1 {
+                                    f1_acc += position;
+                                }
+                            }
+                        },
+                        FringeCounterEvent::End => break,
+                    }
+                }
+                if count == expected_fringes {
+                    f2_acc += last_fringe.unwrap();
+                } else {
+                    eprintln!("unexpected fringe count (got {}, expected {})", count, expected_fringes);
+                    continue 'outer;
+                }
+            }
+
+            let f1_avg = f1_acc/(config.decimation as i64);
+            let f2_avg = f2_acc/(config.decimation as i64);
+            let wavelength = (f2_avg - f1_avg).abs()/(expected_fringes as i64 - 1);
+            let wavelength_nm = (wavelength as f64)*config.ref_wavelength/(noptica::Dpll::TURN as f64);
+            println!("{:.4}", wavelength_nm*1.0e9);
+        }
+
+    };
+    let mut fringe_counter_event = |event: FringeCounterEvent| {
+        fringe_counter_input.set(event);
+        Pin::new(&mut fringe_counter).resume();
+    };
+
     noptica::sample(&config.sample_command, |rising, _falling| {
         refpll.tick(rising & (1 << config.bit_ref) != 0);
         if refpll.locked() {
@@ -252,6 +375,15 @@ fn do_wavemeter(config: &Config) {
                     position_max - off_duty/2);
             });
             quadrant_tracker.input(f_position);
+            if quadrant_tracker.up_start() {
+                fringe_counter_event(FringeCounterEvent::Start);
+            }
+            if quadrant_tracker.up_end() {
+                fringe_counter_event(FringeCounterEvent::End);
+            }
+            if rising & (1 << config.bit_input) != 0 {
+                fringe_counter_event(FringeCounterEvent::Fringe(position));
+            }
         } else {
             position = 0;
             min_max_monitor.reset();
